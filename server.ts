@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import askHandler from './api/ask.js';
+import mcpHandler from './api/mcp/index.js';
 
 dotenv.config();
 
@@ -1123,6 +1124,9 @@ You must return a single JSON object strictly matching this schema:
     res.status(500).json({ error: error.message || 'AI Plan Chat failed' });
   }
 });
+
+// Register MCP Collection Handler
+app.all('/api/mcp', mcpHandler);
 
 // Register MCP Ask Agent Handler
 app.post('/api/ask', askHandler);
