@@ -239,13 +239,23 @@ export const Tab1Discovery: React.FC = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => setIsChatOpen(true)}
-              className="text-[11px] text-sky-300 hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap self-start sm:self-auto font-medium"
-            >
-              <Bot className="w-3.5 h-3.5 text-sky-400" />
-              <span>Open Full Chatbox →</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab(6)}
+                className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer whitespace-nowrap self-start sm:self-auto font-medium"
+              >
+                <span>Ask MCP Agent Panel →</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsChatOpen(true)}
+                className="text-[11px] text-sky-300 hover:text-white flex items-center gap-1 cursor-pointer whitespace-nowrap self-start sm:self-auto font-medium"
+              >
+                <Bot className="w-3.5 h-3.5 text-sky-400" />
+                <span>Holiday Chatbox →</span>
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleAISubmit} className="flex gap-2">

@@ -11,18 +11,20 @@ import { Tab2FlightConfirm } from './components/tabs/Tab2FlightConfirm';
 import { Tab3ItineraryBuilder } from './components/tabs/Tab3ItineraryBuilder';
 import { Tab4Bookings } from './components/tabs/Tab4Bookings';
 import { Tab5SummaryShare } from './components/tabs/Tab5SummaryShare';
+import { AskPanel } from './components/AskPanel';
 import { AIChatModal } from './components/AIChatModal';
 
 const TabRouter: React.FC = () => {
   const { activeTab } = useTrip();
 
   return (
-    <main className="flex-1 min-h-0 overflow-hidden relative">
+    <main className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
       {activeTab === 1 && <Tab1Discovery />}
       {activeTab === 2 && <Tab2FlightConfirm />}
       {activeTab === 3 && <Tab3ItineraryBuilder />}
       {activeTab === 4 && <Tab4Bookings />}
       {activeTab === 5 && <Tab5SummaryShare />}
+      {activeTab === 6 && <AskPanel />}
     </main>
   );
 };

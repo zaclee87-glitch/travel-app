@@ -14,6 +14,7 @@ import {
   RefreshCw,
   X,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 
 const TABS = [
@@ -22,6 +23,7 @@ const TABS = [
   { id: 3, label: 'Itinerary Builder', icon: CalendarDays },
   { id: 4, label: 'Bookings & Logistics', icon: ShieldCheck },
   { id: 5, label: 'Summary & Share', icon: FileCheck2 },
+  { id: 6, label: 'Ask Agent', icon: Terminal },
 ];
 
 const CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'JPY', 'SGD', 'AUD'];

@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import askHandler from './api/ask.js';
 
 dotenv.config();
 
@@ -1122,6 +1123,9 @@ You must return a single JSON object strictly matching this schema:
     res.status(500).json({ error: error.message || 'AI Plan Chat failed' });
   }
 });
+
+// Register MCP Ask Agent Handler
+app.post('/api/ask', askHandler);
 
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
