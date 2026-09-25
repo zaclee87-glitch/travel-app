@@ -4,7 +4,6 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'crypto';
 import {
   FLIGHT_CATALOG,
   HOTEL_CATALOG,
@@ -14,15 +13,7 @@ import {
   CURRENCY_MULTIPLIERS,
 } from './data.js';
 
-// Initialize the WanderPulse Travel MCP Collection Server
-let mcpServerInstance = null;
-let mcpTransportInstance = null;
-
-function getOrCreateMcpServer() {
-  if (mcpServerInstance && mcpTransportInstance) {
-    return { server: mcpServerInstance, transport: mcpTransportInstance };
-  }
-
+function createMcpServer() {
   const server = new Server(
     {
       name: 'wanderpulse-travel-mcp',
@@ -320,24 +311,11 @@ function getOrCreateMcpServer() {
     }
   });
 
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-  });
-
-  server.connect(transport).catch((err) => {
-    console.error('Failed to connect MCP server to transport:', err);
-  });
-
-  mcpServerInstance = server;
-  mcpTransportInstance = transport;
-
-  return { server, transport };
+  return server;
 }
 
 // Master HTTP request handler for /api/mcp
 export default async function handler(req, res) {
-  const { transport } = getOrCreateMcpServer();
-
   // If this is a standard REST GET request without SSE / MCP headers, return collection metadata
   const isSseRequest =
     req.headers['accept']?.includes('text/event-stream') ||
@@ -371,8 +349,14 @@ export default async function handler(req, res) {
     });
   }
 
-  // Pass to Streamable HTTP transport
+  // Handle Streamable HTTP transport with a fresh server & transport per request (stateless mode)
   try {
+    const server = createMcpServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+    await server.connect(transport);
+
     let parsedBody = req.body;
     if (typeof parsedBody === 'string') {
       try {

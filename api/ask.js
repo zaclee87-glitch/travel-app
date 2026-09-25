@@ -30,7 +30,11 @@ export default async function handler(req, res) {
   }
 
   // 3) Parse MCP_SERVERS and connect
-  const rawServers = process.env.MCP_SERVERS || "";
+  const defaultLocalServer = "http://127.0.0.1:3000/api/mcp";
+  const rawServers =
+    process.env.MCP_SERVERS && process.env.MCP_SERVERS.trim()
+      ? process.env.MCP_SERVERS
+      : defaultLocalServer;
   const addresses = rawServers
     .split(",")
     .map((s) => s.trim())
@@ -74,6 +78,20 @@ export default async function handler(req, res) {
           await client.close();
         } catch (_) {}
       }
+    }
+  }
+
+  // If no external MCP servers connected, connect to the built-in free Travel MCP collection server
+  if (connectedClients.length === 0 && !addresses.includes("http://127.0.0.1:3000/api/mcp")) {
+    try {
+      const fallbackClient = new Client({ name: "t5-agent", version: "1.0.0" });
+      const fallbackTransport = new StreamableHTTPClientTransport(
+        new URL("http://127.0.0.1:3000/api/mcp")
+      );
+      await fallbackClient.connect(fallbackTransport);
+      connectedClients.push(fallbackClient);
+    } catch (fallbackErr) {
+      console.error("Fallback to local MCP server failed:", fallbackErr);
     }
   }
 
