@@ -1,3 +1,1 @@
-import handler from './mcp/index.js';
-
-export default handler;
+export { mcpHandler as default } from './_lib/mcp-server.js';

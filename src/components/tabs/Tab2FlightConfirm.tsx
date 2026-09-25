@@ -138,7 +138,7 @@ export const Tab2FlightConfirm: React.FC = () => {
                 Live Flight Options for {selectedDestination.city} ({selectedDestination.code})
               </h2>
               <p className="text-xs text-slate-400">
-                Retrieved directly through Smithery MCP server <span className="font-mono text-sky-300">@gvzq/flight-mcp</span>
+                Retrieved directly through WanderPulse MCP server at <span className="font-mono text-sky-300">/api/mcp</span> (demo dataset)
               </p>
             </div>
             <div className="text-xs text-slate-400 font-mono">

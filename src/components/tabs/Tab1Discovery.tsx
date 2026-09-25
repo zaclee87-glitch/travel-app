@@ -77,7 +77,7 @@ export const Tab1Discovery: React.FC = () => {
             Trip Preferences & Parameters
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Real-time constraints feed Smithery AI MCP flight and hotel query engines.
+            Parameters feed WanderPulse Travel MCP flight and hotel query tools.
           </p>
         </div>
 
@@ -211,9 +211,9 @@ export const Tab1Discovery: React.FC = () => {
         </div>
 
         <div className="mt-auto pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 leading-relaxed">
-          <span>Active Smithery MCP feeds: </span>
-          <span className="font-mono text-slate-400">@gvzq/flight-mcp</span> &middot;{' '}
-          <span className="font-mono text-slate-400">rvibek/smthery</span>
+          <span>Active MCP endpoint: </span>
+          <span className="font-mono text-slate-400">/api/mcp</span> &middot;{' '}
+          <span className="font-mono text-slate-400">wanderpulse-travel-mcp</span>
         </div>
       </div>
 
@@ -234,7 +234,7 @@ export const Tab1Discovery: React.FC = () => {
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Type what kind of holiday you're looking for &mdash; AI Studio runs inference, matches Smithery MCP telemetry, and auto-proposes selections.
+                  Type what kind of holiday you're looking for &mdash; AI Studio runs inference, matches WanderPulse MCP tools, and auto-proposes selections.
                 </p>
               </div>
             </div>

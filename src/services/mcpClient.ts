@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react';
 import {
   CurrencyCode,
   DestinationProposal,
@@ -41,8 +42,8 @@ export const INITIAL_DESTINATIONS: DestinationProposal[] = [
     vibeMatchPct: 96,
     highlights: ['Tsukiji Gourmet Arcade', 'Meiji Forest Shrine', 'Shibuya Sky Vista', 'Yanaka Heritage Laneways'],
     mcpSource: {
-      flight: '@gvzq/flight-mcp',
-      weather: 'rvibek/smthery',
+      flight: 'WanderPulse Demo Flights Catalog',
+      weather: 'WanderPulse Demo Weather Catalog',
     },
   },
   {
@@ -61,8 +62,8 @@ export const INITIAL_DESTINATIONS: DestinationProposal[] = [
     vibeMatchPct: 92,
     highlights: ['Musée d’Orsay', 'Covered Passages of 2nd Arr.', 'Montmartre Harvest Fest', 'Saint-Germain Cafés'],
     mcpSource: {
-      flight: '@gvzq/flight-mcp',
-      weather: 'rvibek/smthery',
+      flight: 'WanderPulse Demo Flights Catalog',
+      weather: 'WanderPulse Demo Weather Catalog',
     },
   },
   {
@@ -81,8 +82,8 @@ export const INITIAL_DESTINATIONS: DestinationProposal[] = [
     vibeMatchPct: 88,
     highlights: ['Capitoline Galleries', 'Forum Antiquities', 'Trastevere Aperitivo', 'Teatro dell’Opera'],
     mcpSource: {
-      flight: '@gvzq/flight-mcp',
-      weather: 'rvibek/smthery',
+      flight: 'WanderPulse Demo Flights Catalog',
+      weather: 'WanderPulse Demo Weather Catalog',
     },
   },
   {
@@ -101,55 +102,287 @@ export const INITIAL_DESTINATIONS: DestinationProposal[] = [
     vibeMatchPct: 85,
     highlights: ['Harpa Concert Hall', 'Perlan Ice Cave Dome', 'Laugavegur Boutiques', 'Thingvellir Fissures'],
     mcpSource: {
-      flight: '@gvzq/flight-mcp',
-      weather: 'rvibek/smthery',
+      flight: 'WanderPulse Demo Flights Catalog',
+      weather: 'WanderPulse Demo Weather Catalog',
     },
   },
 ];
 
+// ----------------------------------------------------
+// Error & Description Types
+// ----------------------------------------------------
+export class McpNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'McpNotFoundError';
+  }
+}
+
+export function describeMcpError(err: any): string {
+  if (!err) return 'An unexpected error occurred.';
+  if (err instanceof McpNotFoundError) {
+    return err.message;
+  }
+  if (err.name === 'AbortError' || err.message?.includes('timeout') || err.message?.includes('timed out')) {
+    return 'The MCP server request timed out after 15 seconds. The server might be temporarily busy.';
+  }
+  if (
+    err.message?.includes('Failed to fetch') ||
+    err.message?.includes('NetworkError') ||
+    err.message?.includes('ECONNREFUSED')
+  ) {
+    return 'Unable to reach the local MCP server at /api/mcp. Please ensure the server is online.';
+  }
+  return err.message || 'An error occurred while communicating with the MCP server.';
+}
+
+// ----------------------------------------------------
+// MCP External Store & Reactive Hook
+// ----------------------------------------------------
+export interface McpLiveStatus {
+  status: 'connected' | 'offline' | 'idle';
+  latency: number | null; // in milliseconds
+  lastCall: string | null;
+  lastError: string | null;
+  serverInfo: {
+    name: string;
+    version: string;
+    protocolVersion: string;
+  };
+  dataset: {
+    flightsCount: number;
+    hotelsCount: number;
+    destinationsCount: number;
+    attractionsCount: number;
+    note: string;
+  };
+}
+
+let currentStatus: McpLiveStatus = {
+  status: 'idle',
+  latency: null,
+  lastCall: null,
+  lastError: null,
+  serverInfo: {
+    name: 'wanderpulse-travel-mcp',
+    version: '3.0.0',
+    protocolVersion: '2025-11-25',
+  },
+  dataset: {
+    flightsCount: 10,
+    hotelsCount: 9,
+    destinationsCount: 4,
+    attractionsCount: 11,
+    note: 'Demo dataset: illustrative travel planning catalog bundled with this app, not verified against live airline GDS or hotel inventory.',
+  },
+};
+
+const listeners = new Set<() => void>();
+
+function emitStatusChange() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function updateStatus(updates: Partial<McpLiveStatus>) {
+  currentStatus = { ...currentStatus, ...updates };
+  emitStatusChange();
+}
+
+export function useMcpStatus(): McpLiveStatus {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      listeners.add(onStoreChange);
+      return () => {
+        listeners.delete(onStoreChange);
+      };
+    },
+    () => currentStatus,
+    () => currentStatus
+  );
+}
+
+// ----------------------------------------------------
+// Real MCP Client for /api/mcp (Protocol 2025-11-25)
+// ----------------------------------------------------
+let rpcIdCounter = 0;
+let isInitialized = false;
+let negotiatedProtocol = '2025-11-25';
+
+async function performMcpRequest(method: string, params?: any, timeoutMs = 15000): Promise<any> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+  };
+
+  if (isInitialized) {
+    headers['MCP-Protocol-Version'] = negotiatedProtocol;
+  }
+
+  const payload: any = {
+    jsonrpc: '2.0',
+    method,
+  };
+
+  if (method !== 'notifications/initialized') {
+    payload.id = ++rpcIdCounter;
+  }
+
+  if (params !== undefined) {
+    payload.params = params;
+  }
+
+  const res = await fetch('/api/mcp', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (method === 'notifications/initialized') {
+    return { ok: true };
+  }
+
+  if (!res.ok) {
+    let errBody: any;
+    try {
+      errBody = await res.json();
+    } catch (_) {}
+    throw new Error(errBody?.error?.message || `MCP HTTP error ${res.status}: ${res.statusText}`);
+  }
+
+  const json = await res.json();
+  if (json.error) {
+    throw new Error(json.error.message || `JSON-RPC error ${json.error.code}`);
+  }
+
+  return json.result;
+}
+
+async function ensureInitialized(): Promise<void> {
+  if (isInitialized) return;
+
+  try {
+    const initResult = await performMcpRequest('initialize', {
+      protocolVersion: '2025-11-25',
+      capabilities: {},
+      clientInfo: {
+        name: 'wanderpulse-client',
+        version: '3.0.0',
+      },
+    });
+
+    negotiatedProtocol = initResult?.protocolVersion || '2025-11-25';
+
+    await performMcpRequest('notifications/initialized');
+    isInitialized = true;
+  } catch (err: any) {
+    updateStatus({
+      status: 'offline',
+      latency: null,
+      lastError: err.message,
+      lastCall: new Date().toISOString(),
+    });
+    throw err;
+  }
+}
+
+export async function callMcp(
+  tool: string,
+  args: Record<string, any> = {}
+): Promise<{ data: any; rawPayload: any; latency: number }> {
+  const t0 = performance.now();
+  try {
+    await ensureInitialized();
+
+    const callResult = await performMcpRequest('tools/call', {
+      name: tool,
+      arguments: args,
+    });
+
+    const elapsed = Math.round(performance.now() - t0);
+
+    let payload: any = null;
+    if (callResult?.structuredContent) {
+      payload = callResult.structuredContent;
+    } else if (callResult?.content?.[0]?.text) {
+      try {
+        payload = JSON.parse(callResult.content[0].text);
+      } catch (_) {
+        payload = { result: callResult.content[0].text };
+      }
+    }
+
+    if (callResult?.isError) {
+      if (payload && payload.found === false) {
+        updateStatus({
+          status: 'connected',
+          latency: elapsed,
+          lastCall: new Date().toISOString(),
+        });
+        throw new McpNotFoundError(payload.message || `No result found for ${JSON.stringify(args)}`);
+      }
+      throw new Error(payload?.message || `MCP tool "${tool}" returned an execution error`);
+    }
+
+    updateStatus({
+      status: 'connected',
+      latency: elapsed,
+      lastError: null,
+      lastCall: new Date().toISOString(),
+    });
+
+    const data = payload?.result !== undefined ? payload.result : payload;
+    return { data, rawPayload: payload, latency: elapsed };
+  } catch (err: any) {
+    const elapsed = Math.round(performance.now() - t0);
+    const isNetworkOrTimeout =
+      err.name === 'AbortError' ||
+      err.message?.includes('HTTP error 5') ||
+      err.message?.includes('Failed to fetch');
+
+    if (isNetworkOrTimeout) {
+      isInitialized = false;
+      updateStatus({
+        status: 'offline',
+        latency: null,
+        lastError: err.message,
+        lastCall: new Date().toISOString(),
+      });
+    }
+
+    throw err;
+  }
+}
+
+// ----------------------------------------------------
+// High-Level Data Fetchers Using MCP Tools
+// ----------------------------------------------------
 export async function fetchMCPStatus(): Promise<MCPServiceStatus[]> {
   try {
-    const res = await fetch('/api/mcp/status');
-    if (!res.ok) throw new Error('Status failed');
-    const data = await res.json();
-    return data.servers;
-  } catch {
-    // Verified fallback
+    const { data, latency } = await callMcp('get_mcp_status', {});
     return [
       {
-        serverId: '@gvzq/flight-mcp',
-        name: 'Smithery Flight Pricing Engine',
+        serverId: data.server?.name || 'wanderpulse-travel-mcp',
+        name: data.server?.title || 'WanderPulse Travel Planning MCP (bundled demo dataset)',
         transport: 'streamable-mcp-http',
-        verifiedVersion: '1.2.4',
+        verifiedVersion: data.server?.version || '3.0.0',
         status: 'connected',
-        latencyMs: 42,
+        latencyMs: latency,
         lastSync: new Date().toISOString(),
       },
+    ];
+  } catch (err) {
+    return [
       {
-        serverId: 'google/hotels',
-        name: 'Google Hotels Live Availability',
+        serverId: 'wanderpulse-travel-mcp',
+        name: 'WanderPulse Travel Planning MCP (bundled demo dataset)',
         transport: 'streamable-mcp-http',
-        verifiedVersion: '2.0.1',
-        status: 'connected',
-        latencyMs: 38,
-        lastSync: new Date().toISOString(),
-      },
-      {
-        serverId: 'rvibek/smthery',
-        name: 'Smithery Weather Forecast & Rain Radar',
-        transport: 'streamable-mcp-http',
-        verifiedVersion: '0.9.8',
-        status: 'connected',
-        latencyMs: 29,
-        lastSync: new Date().toISOString(),
-      },
-      {
-        serverId: 'exasearch/exa-mcp',
-        name: 'Exa Semantic Attractions & Event Anchors',
-        transport: 'streamable-mcp-http',
-        verifiedVersion: '1.4.0',
-        status: 'connected',
-        latencyMs: 51,
+        verifiedVersion: '3.0.0',
+        status: 'standby',
+        latencyMs: 0,
         lastSync: new Date().toISOString(),
       },
     ];
@@ -159,194 +392,135 @@ export async function fetchMCPStatus(): Promise<MCPServiceStatus[]> {
 export async function fetchFlights(
   destinationCode: string,
   currency: CurrencyCode = 'USD',
-  partySize = 1,
+  partySize = 1
 ): Promise<FlightOption[]> {
-  try {
-    const res = await fetch('/api/mcp/flights', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ destination: destinationCode, currency, partySize }),
-    });
-    if (!res.ok) throw new Error('Failed to fetch flights');
-    const data = await res.json();
-    return data.flights;
-  } catch {
-    return [
-      {
-        id: 'fl-fallback-01',
-        airline: 'All Nippon Airways (ANA)',
-        airlineCode: 'NH',
-        flightNumber: 'NH 109',
-        departureTime: '11:30 AM',
-        arrivalTime: '03:15 PM (+1d)',
-        duration: '14h 45m',
-        stops: 'Nonstop',
-        price: 1120,
-        cabinClass: 'Economy Standard',
-        carbonKg: 490,
-        baggageIncluded: true,
-        mcpServer: '@gvzq/flight-mcp',
-      },
-      {
-        id: 'fl-fallback-02',
-        airline: 'Japan Airlines (JAL)',
-        airlineCode: 'JL',
-        flightNumber: 'JL 005',
-        departureTime: '01:45 PM',
-        arrivalTime: '05:30 PM (+1d)',
-        duration: '14h 45m',
-        stops: 'Nonstop',
-        price: 1240,
-        cabinClass: 'Premium Economy',
-        carbonKg: 510,
-        baggageIncluded: true,
-        mcpServer: '@gvzq/flight-mcp',
-      },
-    ];
-  }
+  const { data } = await callMcp('search_flights', {
+    destination: destinationCode,
+    currency,
+    partySize,
+  });
+
+  return (data || []).map((f: any) => ({
+    id: f.id,
+    airline: f.airline,
+    airlineCode: f.airlineCode,
+    flightNumber: f.flightNumber,
+    departureTime: f.departureTime,
+    arrivalTime: f.arrivalTime,
+    duration: f.duration,
+    stops: f.stops,
+    stopCity: f.stopCity,
+    price: f.pricePerPerson || f.basePrice,
+    cabinClass: f.cabinClass,
+    carbonKg: f.carbonKg,
+    baggageIncluded: f.baggageIncluded,
+    mcpServer: f.mcpSource || 'wanderpulse-travel-mcp',
+  }));
 }
 
 export async function fetchHotels(
   destinationCity: string,
-  nights: number,
-  currency: CurrencyCode = 'USD',
+  nights = 4,
+  currency: CurrencyCode = 'USD'
 ): Promise<BookingItem[]> {
-  try {
-    const res = await fetch('/api/mcp/hotels', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ destination: destinationCity, nights, currency }),
-    });
-    if (!res.ok) throw new Error('Failed to fetch hotels');
-    const data = await res.json();
-    return data.hotels.map((h: any) => ({
-      id: h.id,
-      type: 'hotel' as const,
-      title: h.name,
-      subtitle: h.neighborhood,
-      provider: 'Google Hotels via MCP',
-      rating: h.rating,
-      reviewCount: h.reviews,
-      price: h.pricePerNight,
-      priceUnit: '/ night',
-      status: 'recommended' as const,
-      details: h.amenities,
-      badge: h.badge,
-      mcpSource: 'google/hotels',
-    }));
-  } catch {
-    return [
-      {
-        id: 'ht-tko-01',
-        type: 'hotel',
-        title: 'The Capitol Hotel Tokyu',
-        subtitle: 'Chiyoda / Akasaka',
-        provider: 'Google Hotels via MCP',
-        rating: 4.8,
-        reviewCount: 1420,
-        price: 380,
-        priceUnit: '/ night',
-        status: 'recommended',
-        details: ['Direct Subway Access', 'Japanese Garden View', 'Spa & Onsen', 'Free Wi-Fi'],
-        badge: 'Staff Choice',
-        mcpSource: 'google/hotels',
-      },
-      {
-        id: 'ht-tko-02',
-        type: 'hotel',
-        title: 'Trunk Hotel Yoyogi Park',
-        subtitle: 'Shibuya / Harajuku',
-        provider: 'Google Hotels via MCP',
-        rating: 4.7,
-        reviewCount: 890,
-        price: 290,
-        priceUnit: '/ night',
-        status: 'recommended',
-        details: ['Rooftop Infinity Pool', 'Boutique Coffee Lounge', 'Curated Art Decor'],
-        badge: 'Design Boutique',
-        mcpSource: 'google/hotels',
-      },
-    ];
-  }
+  const { data } = await callMcp('search_hotels', {
+    destination: destinationCity,
+    nights,
+    currency,
+  });
+
+  return (data || []).map((h: any) => ({
+    id: h.id,
+    type: 'hotel' as const,
+    title: h.name,
+    subtitle: h.neighborhood,
+    provider: 'WanderPulse MCP (demo dataset)',
+    rating: h.rating,
+    reviewCount: h.reviews,
+    price: h.pricePerNight || h.basePricePerNight,
+    priceUnit: '/ night',
+    status: 'recommended' as const,
+    details: h.amenities,
+    badge: h.badge,
+    mcpSource: h.mcpSource || 'wanderpulse-travel-mcp',
+  }));
 }
 
-export async function fetchAttractions(city: string): Promise<ActivityItem[]> {
-  try {
-    const res = await fetch('/api/mcp/attractions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ city }),
-    });
-    if (!res.ok) throw new Error('Failed attractions fetch');
-    const data = await res.json();
-    return data.activities;
-  } catch {
-    return [
-      {
-        id: 'act-fallback-1',
-        timeSlot: 'Morning',
-        title: 'Meiji Jingu Shrine & Forest Walk',
-        category: 'Culture',
-        location: 'Shibuya',
-        durationHours: 2.5,
-        cost: 0,
-        isOutdoor: true,
-        isAnchorEvent: false,
-        weatherSuitability: 'Sunny Preferred',
-        description: 'Sprawling cypress forest walkway leading to Tokyo’s most revered Shinto shrine.',
-        rainAlternative: {
-          title: 'Nezu Museum & Japanese Bamboo Gallery',
-          category: 'Culture',
-          location: 'Minami-Aoyama',
-          description: 'Covered zen glass pavilion and world-renowned pre-modern Japanese art collection.',
-          cost: 12,
-        },
-      },
-    ];
-  }
+export async function fetchAttractions(
+  destinationCity: string,
+  category?: string
+): Promise<ActivityItem[]> {
+  const { data } = await callMcp('get_attractions', {
+    destination: destinationCity,
+    ...(category ? { category } : {}),
+  });
+
+  return (data || []).map((a: any, idx: number) => ({
+    id: a.id || `act-${idx + 1}`,
+    timeSlot: (idx % 2 === 0 ? 'Morning' : 'Evening') as 'Morning' | 'Evening',
+    title: a.title,
+    category: (a.category || 'Culture') as ActivityItem['category'],
+    location: a.location,
+    durationHours: a.durationHours || 2.0,
+    cost: a.cost || 0,
+    isOutdoor: Boolean(a.isOutdoor),
+    isAnchorEvent: Boolean(a.isAnchorEvent),
+    weatherSuitability: (a.weatherSuitability || 'All-Weather') as ActivityItem['weatherSuitability'],
+    description: a.description,
+    rainAlternative: a.rainAlternative,
+  }));
 }
 
 export async function replanForWetWeather(
-  city: string,
-  activities: ActivityItem[],
+  destinationCity: string,
+  currentActivities: ActivityItem[]
 ): Promise<ActivityItem[]> {
   try {
-    const res = await fetch('/api/mcp/replan-rain', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ city, currentDayPlan: activities }),
+    const { data } = await callMcp('replan_rain', {
+      destination: destinationCity,
+      rainyDays: [1, 2, 3, 4],
     });
-    if (!res.ok) throw new Error('Replan failed');
-    const data = await res.json();
-    return data.replannedActivities;
-  } catch {
-    // Non-destructive fallback replan
-    return activities.map((act) => {
-      if (act.isAnchorEvent) return { ...act, wasReplacedForRain: false };
-      if (act.isOutdoor && act.rainAlternative) {
-        return {
-          id: `${act.id}-indoor`,
-          timeSlot: act.timeSlot,
-          title: act.rainAlternative.title,
-          category: (act.rainAlternative.category as any) || 'Culture',
-          location: act.rainAlternative.location,
-          durationHours: act.durationHours,
-          cost: act.rainAlternative.cost,
-          isOutdoor: false,
-          isAnchorEvent: false,
-          weatherSuitability: 'Indoor Only',
-          description: act.rainAlternative.description,
-          wasReplacedForRain: true,
-          originalActivityTitle: act.title,
-        };
-      }
-      return { ...act, wasReplacedForRain: false };
-    });
+
+    const replannedDay = data?.replannedDays?.[0];
+    if (replannedDay?.activities && replannedDay.activities.length > 0) {
+      return replannedDay.activities.map((a: any, idx: number) => ({
+        id: a.id || `act-replan-${idx + 1}`,
+        timeSlot: (idx % 2 === 0 ? 'Morning' : 'Evening') as 'Morning' | 'Evening',
+        title: a.title,
+        category: (a.category || 'Culture') as ActivityItem['category'],
+        location: a.location || 'Covered Cultural Center',
+        durationHours: a.durationHours || 2.0,
+        cost: a.cost || 0,
+        isOutdoor: false,
+        isAnchorEvent: Boolean(a.isAnchorEvent),
+        weatherSuitability: 'Indoor Only' as const,
+        description: a.description,
+      }));
+    }
+  } catch (err) {
+    console.error('Wet weather replan MCP tool call failed:', err);
   }
+
+  // Swap any outdoor activity locally with its rainAlternative if already present
+  return currentActivities.map((act) => {
+    if (act.isOutdoor && act.rainAlternative) {
+      return {
+        ...act,
+        title: act.rainAlternative.title,
+        category: (act.rainAlternative.category || 'Culture') as ActivityItem['category'],
+        location: act.rainAlternative.location,
+        description: act.rainAlternative.description,
+        cost: act.rainAlternative.cost,
+        isOutdoor: false,
+        weatherSuitability: 'Indoor Only' as const,
+      };
+    }
+    return act;
+  });
 }
 
 export function generateInitialDays(city: string, activities: ActivityItem[]): ItineraryDay[] {
-  const dates = ['Oct 14, 2026', 'Oct 15, 2026', 'Oct 16, 2026', 'Oct 17, 2026'];
+  const dates = ['Wed, Oct 14', 'Thu, Oct 15', 'Fri, Oct 16', 'Sat, Oct 17'];
   const themes = [
     'Arrival & Historic Sanctuaries',
     'Gastronomic Heritage & Covered Arcades',
@@ -354,16 +528,14 @@ export function generateInitialDays(city: string, activities: ActivityItem[]): I
     'Panoramic Skylines & Hidden Izakayas',
   ];
   const forecasts = [
-    { tempC: 21, condition: 'Clear Skies', rainChance: 12, isRainy: false },
-    { tempC: 18, condition: 'Intermittent Showers', rainChance: 78, isRainy: true },
+    { tempC: 21, condition: 'Clear Skies', rainChance: 10, isRainy: false },
+    { tempC: 19, condition: 'Passing Showers', rainChance: 68, isRainy: true },
     { tempC: 22, condition: 'Mild & Sunny', rainChance: 15, isRainy: false },
-    { tempC: 19, condition: 'Overcast with Drizzle', rainChance: 65, isRainy: true },
+    { tempC: 20, condition: 'Partly Cloudy', rainChance: 25, isRainy: false },
   ];
 
   return [1, 2, 3, 4].map((dayNum, idx) => {
-    // Distribute activities logically across 4 days
     const dayActivities = activities.slice(idx * 2, idx * 2 + 2);
-    // If not enough activities, clone with varied slot
     const finalActs =
       dayActivities.length >= 2
         ? dayActivities
@@ -417,7 +589,7 @@ export function generateInitialDays(city: string, activities: ActivityItem[]): I
 export async function sendAIPlanQuery(
   query: string,
   history: AIChatMessage[] = [],
-  currentContext: any = {},
+  currentContext: any = {}
 ): Promise<{ replyText: string; proposedPlan?: ProposedPlan }> {
   try {
     const res = await fetch('/api/ai-plan-chat', {
@@ -433,7 +605,9 @@ export async function sendAIPlanQuery(
     };
   } catch (err: any) {
     return {
-      replyText: `I encountered an issue connecting to the AI planning service: ${err.message || 'Unknown error'}. Please try again.`,
+      replyText: `I encountered an issue connecting to the AI planning service: ${
+        err.message || 'Unknown error'
+      }. Please try again.`,
     };
   }
 }

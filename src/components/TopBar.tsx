@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTrip } from '../context/TripContext';
-import { CURRENCY_SYMBOLS } from '../services/mcpClient';
+import { CURRENCY_SYMBOLS, useMcpStatus } from '../services/mcpClient';
 import { CurrencyCode } from '../types/travel';
 import {
   Compass,
@@ -11,6 +11,7 @@ import {
   Activity,
   ChevronDown,
   CheckCircle2,
+  AlertCircle,
   RefreshCw,
   X,
   Sparkles,
@@ -40,6 +41,7 @@ export const TopBar: React.FC = () => {
     setIsChatOpen,
   } = useTrip();
 
+  const liveMcp = useMcpStatus();
   const [showMCPModal, setShowMCPModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -61,11 +63,11 @@ export const TopBar: React.FC = () => {
             WanderPulse
           </span>
           <span className="text-xs text-slate-500 font-mono hidden lg:inline">
-            workspace
+            travel-mcp
           </span>
         </div>
 
-        {/* Zone 2: Clean 5-phase navigation tabs (single-line, non-wrapping) */}
+        {/* Zone 2: Clean 6 navigation tabs */}
         <nav className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-lg border border-slate-800/80">
           {TABS.map((tab) => {
             const Icon = tab.icon;
@@ -87,26 +89,40 @@ export const TopBar: React.FC = () => {
           })}
         </nav>
 
-        {/* Zone 3: 1-2 primary actions */}
+        {/* Zone 3: Actions & Status */}
         <div className="flex items-center gap-2.5">
           {/* AI Holiday Planner Chat Trigger */}
           <button
             onClick={() => setIsChatOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 active:scale-95 rounded-md transition-all cursor-pointer shadow-sm shadow-sky-950/60"
-            title="Open Google AI Studio Holiday Planner Chat"
+            title="Open AI Studio Holiday Planner Chat"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-            <span className="hidden sm:inline">AI Holiday Planner</span>
+            <span className="hidden sm:inline">AI Planner</span>
           </button>
 
-          {/* MCP Integration Status Indicator */}
+          {/* Real MCP Integration Status Indicator */}
           <button
             onClick={() => setShowMCPModal(true)}
             className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-slate-300 bg-slate-900 border border-slate-800 rounded-md hover:border-slate-700 transition-colors cursor-pointer"
-            title="Smithery AI MCP Server Connections"
+            title="WanderPulse MCP Server Connection Inspector"
           >
-            <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span className="font-mono text-[11px] text-slate-300 hidden sm:inline">Smithery MCP: 4 Live</span>
+            <Activity
+              className={`w-3.5 h-3.5 ${
+                liveMcp.status === 'connected'
+                  ? 'text-emerald-400 animate-pulse'
+                  : liveMcp.status === 'offline'
+                  ? 'text-rose-400'
+                  : 'text-slate-400'
+              }`}
+            />
+            <span className="font-mono text-[11px] text-slate-300 hidden sm:inline">
+              {liveMcp.status === 'connected'
+                ? `MCP: ${liveMcp.latency !== null ? `${liveMcp.latency}ms` : '--'}`
+                : liveMcp.status === 'offline'
+                ? 'MCP: Offline'
+                : 'MCP: Ready'}
+            </span>
             <ChevronDown className="w-3 h-3 text-slate-500" />
           </button>
 
@@ -140,25 +156,34 @@ export const TopBar: React.FC = () => {
         </div>
       </header>
 
-      {/* Smithery AI MCP Server Diagnostic Modal */}
+      {/* Real MCP Server Diagnostic Modal */}
       {showMCPModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    liveMcp.status === 'connected'
+                      ? 'bg-emerald-400 animate-ping'
+                      : liveMcp.status === 'offline'
+                      ? 'bg-rose-400'
+                      : 'bg-amber-400'
+                  }`}
+                />
                 <h3 className="text-sm font-semibold text-white">
-                  Smithery AI MCP Protocol Registry
+                  WanderPulse Travel Planning MCP Inspector
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleRefresh}
                   disabled={isRefreshing}
-                  className="p-1 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                  title="Ping MCP servers"
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-sky-400 bg-sky-950/60 border border-sky-800/60 hover:bg-sky-900/60 rounded transition-colors cursor-pointer"
+                  title="Refresh from MCP"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span>Refresh from MCP</span>
                 </button>
                 <button
                   onClick={() => setShowMCPModal(false)}
@@ -170,46 +195,68 @@ export const TopBar: React.FC = () => {
             </div>
 
             <div className="p-5 space-y-4 overflow-y-auto">
-              <p className="text-xs text-slate-400 leading-relaxed">
-                WanderPulse links live travel data via verified Smithery AI Model Context Protocol (MCP) streamable endpoints. All flight availability, hotel inventories, weather telemetry, and semantic attraction anchors are dynamically orchestrated.
-              </p>
-
-              <div className="space-y-2.5">
-                {mcpStatus.map((mcp) => (
-                  <div
-                    key={mcp.serverId}
-                    className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-lg flex items-center justify-between"
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono font-semibold text-sky-300">
+                    {liveMcp.serverInfo.name}
+                  </span>
+                  <span
+                    className={`text-[11px] font-mono px-2 py-0.5 rounded ${
+                      liveMcp.status === 'connected'
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
+                        : liveMcp.status === 'offline'
+                        ? 'bg-rose-950 text-rose-400 border border-rose-800/60'
+                        : 'bg-slate-800 text-slate-300'
+                    }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-medium text-sky-300">
-                          {mcp.serverId}
-                        </span>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          v{mcp.verifiedVersion}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300">{mcp.name}</p>
-                      <div className="text-[11px] text-slate-500 font-mono flex items-center gap-2">
-                        <span>Transport: {mcp.transport}</span>
-                        <span>·</span>
-                        <span>Latency: {mcp.latencyMs}ms</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Live</span>
-                    </div>
+                    {liveMcp.status === 'connected' ? 'Connected' : liveMcp.status === 'offline' ? 'Offline' : 'Standby'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono space-y-1">
+                  <div>Endpoint: <span className="text-slate-200">/api/mcp</span> (Streamable HTTP)</div>
+                  <div>Protocol Version: <span className="text-slate-200">{liveMcp.serverInfo.protocolVersion}</span></div>
+                  <div>
+                    Measured Browser Latency:{' '}
+                    <span className="text-emerald-400 font-semibold">
+                      {liveMcp.latency !== null ? `${liveMcp.latency} ms` : '--'}
+                    </span>
                   </div>
-                ))}
+                  <div>
+                    Dataset Catalog:{' '}
+                    <span className="text-sky-300 font-semibold">
+                      {liveMcp.dataset.destinationsCount} destinations · {liveMcp.dataset.flightsCount} flights · {liveMcp.dataset.hotelsCount} hotels · {liveMcp.dataset.attractionsCount} attractions
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="p-3 bg-sky-950/30 border border-sky-900/40 rounded-lg text-xs text-sky-300 space-y-1">
-                <span className="font-semibold">Wet-Weather Autonomous Replanner:</span>
-                <p className="text-slate-400 text-[11px] leading-relaxed">
-                  When weather radars detect precipitation, WanderPulse queries <span className="font-mono text-sky-300">rvibek/smthery</span> and swaps outdoor routes with indoor alternatives from <span className="font-mono text-sky-300">exasearch/exa-mcp</span> while preserving booked event anchors.
-                </p>
+              {/* Disclaimer */}
+              <div className="p-3 bg-amber-950/20 border border-amber-900/40 rounded-lg text-xs text-amber-200/90 leading-relaxed">
+                <p className="font-semibold text-amber-300 mb-0.5">Demo Dataset Transparency:</p>
+                {liveMcp.dataset.note}
+              </div>
+
+              {/* Tool Registry */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium text-slate-300">Registered MCP Tools (6):</span>
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  {[
+                    'search_flights',
+                    'search_hotels',
+                    'get_weather',
+                    'get_attractions',
+                    'replan_rain',
+                    'get_mcp_status',
+                  ].map((t) => (
+                    <div
+                      key={t}
+                      className="px-2.5 py-1.5 bg-slate-950 border border-slate-800/80 rounded flex items-center justify-between"
+                    >
+                      <span className="text-slate-300">{t}</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

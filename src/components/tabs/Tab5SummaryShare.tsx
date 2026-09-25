@@ -419,7 +419,7 @@ export const Tab5SummaryShare: React.FC = () => {
             </button>
 
             <div className="text-[11px] text-slate-500 font-mono">
-              WanderPulse Travel Studio &middot; Powered by Smithery AI MCP Protocols
+              WanderPulse Travel Studio &middot; Powered by WanderPulse Travel Planning MCP (Demo Dataset)
             </div>
           </div>
         </div>
