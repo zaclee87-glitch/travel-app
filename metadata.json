@@ -1,0 +1,6 @@
+{
+  "name": "WanderPulse - Travel Planner & Wet-Weather Replanner",
+  "description": "Interactive non-scrolling travel planning studio powered by Smithery AI MCP tools for real-time flights, hotels, weather forecasts, and dynamic contingency itinerary replanning.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
