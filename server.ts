@@ -4,6 +4,12 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { mcpHandler, MCP_PATH, SERVER_INFO, DATASET } from './api/_lib/mcp-server.js';
+import statusHandler from './api/mcp/status.js';
+import flightsHandler from './api/mcp/flights.js';
+import hotelsHandler from './api/mcp/hotels.js';
+import weatherHandler from './api/mcp/weather.js';
+import attractionsHandler from './api/mcp/attractions.js';
+import replanRainHandler from './api/mcp/replan-rain.js';
 import healthHandler from './api/health.js';
 import askHandler from './api/ask.js';
 
@@ -36,8 +42,16 @@ app.use('/api', (err: any, _req: express.Request, res: express.Response, next: e
   next();
 });
 
-// MCP Server endpoints (both /api/mcp and /api)
-app.all(['/api/mcp', '/api'], mcpHandler);
+// Direct sub-routes under /api/mcp/* for REST/JSON queries
+app.all('/api/mcp/status', statusHandler);
+app.all('/api/mcp/flights', flightsHandler);
+app.all('/api/mcp/hotels', hotelsHandler);
+app.all('/api/mcp/weather', weatherHandler);
+app.all('/api/mcp/attractions', attractionsHandler);
+app.all('/api/mcp/replan-rain', replanRainHandler);
+
+// MCP Streamable HTTP endpoints (both /api/mcp and /api/mcp/index)
+app.all(['/api/mcp', '/api/mcp/index', '/api'], mcpHandler);
 
 // Health check endpoint reporting MCP_PATH, SERVER_INFO, and DATASET
 app.get('/api/health', healthHandler);
